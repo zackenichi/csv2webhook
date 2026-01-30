@@ -1,64 +1,336 @@
-import Image from "next/image";
+'use client';
+
+import { useMemo, useRef, useState } from 'react';
+import FailedRows from '@/app/components/FailedRows';
+import FlowCard from '@/app/components/FlowCard';
+import StepMapping from '@/app/components/StepMapping';
+import StepUpload from '@/app/components/StepUpload';
+import StepWebhook from '@/app/components/StepWebhook';
+import { buildMapping, parseCSV } from '@/app/lib/csv';
+import type { FailedRow, MappingRow } from '@/app/lib/types';
 
 export default function Home() {
+  const [csvName, setCsvName] = useState('');
+  const [headers, setHeaders] = useState<string[]>([]);
+  const [rows, setRows] = useState<string[][]>([]);
+  const [mapping, setMapping] = useState<MappingRow[]>([]);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [webhookUrl, setWebhookUrl] = useState('');
+  const [error, setError] = useState('');
+  const [lastError, setLastError] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sentCount, setSentCount] = useState(0);
+  const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
+  const cancelRef = useRef(false);
+
+  const rowCount = rows.length;
+  const includedCount = mapping.filter((item) => item.enabled).length;
+  const failCount = failedRows.length;
+
+  const examplePayload = useMemo(() => {
+    if (!rows.length || !mapping.length) return null;
+    const payload: Record<string, string> = {};
+    mapping.forEach((item, index) => {
+      if (!item.enabled) return;
+      payload[item.key] = rows[0]?.[index] ?? '';
+    });
+    return payload;
+  }, [mapping, rows]);
+
+  const handleFile = async (file: File | null) => {
+    if (!file) return;
+    setError('');
+    setLastError('');
+    setSentCount(0);
+    setFailedRows([]);
+
+    const text = await file.text();
+    const parsed = parseCSV(text);
+    if (!parsed.length) {
+      setError("We couldn't find any rows in that CSV.");
+      return;
+    }
+    if (parsed[0].length === 0) {
+      setError('Your CSV header row looks empty.');
+      return;
+    }
+    const sanitizedHeaders = parsed[0].map((header) => header.trim());
+    const dataRows = parsed.slice(1);
+    setCsvName(file.name);
+    setHeaders(sanitizedHeaders);
+    setRows(dataRows);
+    setMapping(buildMapping(sanitizedHeaders, dataRows[0] ?? []));
+    setStep(2);
+  };
+
+  const updateMapping = (index: number, updates: Partial<MappingRow>) => {
+    setMapping((current) =>
+      current.map((item, position) =>
+        position === index ? { ...item, ...updates } : item,
+      ),
+    );
+  };
+
+  const resetFlow = () => {
+    cancelRef.current = false;
+    setCsvName('');
+    setHeaders([]);
+    setRows([]);
+    setMapping([]);
+    setWebhookUrl('');
+    setError('');
+    setLastError('');
+    setSentCount(0);
+    setFailedRows([]);
+    setStep(1);
+  };
+
+  const buildPayloadForRow = (row: string[]) => {
+    const payload: Record<string, string> = {};
+    mapping.forEach((item, index) => {
+      if (!item.enabled) return;
+      payload[item.key] = row?.[index] ?? '';
+    });
+    return payload;
+  };
+
+  const delay = (ms: number) =>
+    new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+
+  const sendPayload = async (
+    payload: Record<string, string>,
+    rowIndex: number,
+  ) => {
+    const response = await fetch('/api/webhook', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url: webhookUrl, payload }),
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Row ${rowIndex + 1} failed with ${response.status} ${response.statusText}`,
+      );
+    }
+  };
+
+  const sendToWebhook = async () => {
+    cancelRef.current = false;
+    if (!webhookUrl) {
+      setError('Add a webhook URL to continue.');
+      return;
+    }
+    if (!rows.length) {
+      setError('Your CSV has no data rows to send.');
+      return;
+    }
+    if (!includedCount) {
+      setError('Include at least one field before sending.');
+      return;
+    }
+
+    setError('');
+    setLastError('');
+    setSending(true);
+    setSentCount(0);
+    setFailedRows([]);
+
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
+      if (cancelRef.current) {
+        setLastError(`Stopped after ${rowIndex} row(s).`);
+        break;
+      }
+      const row = rows[rowIndex];
+      const payload = buildPayloadForRow(row);
+      let attempt = 0;
+      let success = false;
+      let lastMessage = '';
+
+      while (attempt < 3 && !success && !cancelRef.current) {
+        try {
+          attempt += 1;
+          await sendPayload(payload, rowIndex);
+          success = true;
+        } catch (err) {
+          lastMessage =
+            err instanceof Error
+              ? err.message
+              : 'Row failed with a network error';
+          setLastError(lastMessage);
+          console.error('Webhook request failed', {
+            row: rowIndex + 1,
+            attempt,
+            error: err,
+          });
+          if (attempt < 3) {
+            await delay(750);
+          }
+        }
+      }
+
+      if (!success) {
+        setFailedRows((current) => [
+          ...current,
+          {
+            index: rowIndex,
+            payload,
+            error: lastMessage || 'Row failed after 3 attempts.',
+          },
+        ]);
+      }
+
+      setSentCount((count) => count + 1);
+    }
+
+    setSending(false);
+    if (!cancelRef.current) {
+      setLastError("");
+    }
+  };
+
+  const stopSending = () => {
+    cancelRef.current = true;
+  };
+
+  const retryFailed = async () => {
+    if (!failedRows.length) return;
+    cancelRef.current = false;
+    setSending(true);
+    setLastError('');
+
+    const remaining: FailedRow[] = [];
+
+    for (let i = 0; i < failedRows.length; i += 1) {
+      if (cancelRef.current) {
+        remaining.push(...failedRows.slice(i));
+        break;
+      }
+      const item = failedRows[i];
+      let attempt = 0;
+      let success = false;
+      let lastMessage = item.error;
+
+      while (attempt < 3 && !success && !cancelRef.current) {
+        try {
+          attempt += 1;
+          await sendPayload(item.payload, item.index);
+          success = true;
+        } catch (err) {
+          lastMessage =
+            err instanceof Error
+              ? err.message
+              : 'Row failed with a network error';
+          setLastError(lastMessage);
+          console.error('Webhook retry failed', {
+            row: item.index + 1,
+            attempt,
+            error: err,
+          });
+          if (attempt < 3) {
+            await delay(750);
+          }
+        }
+      }
+
+      if (!success) {
+        remaining.push({ ...item, error: lastMessage });
+      }
+    }
+
+    setFailedRows(remaining);
+    setSending(false);
+    if (!cancelRef.current) {
+      setLastError("");
+    }
+  };
+
+  const removeFailed = (index: number) => {
+    setFailedRows((current) => current.filter((item) => item.index !== index));
+  };
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
+    <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,217,148,0.45),transparent_55%),radial-gradient(circle_at_20%_30%,rgba(141,199,255,0.35),transparent_50%),radial-gradient(circle_at_80%_60%,rgba(255,168,168,0.35),transparent_55%),linear-gradient(180deg,#e9e6df,#dde3ee)] px-6 py-12 text-slate-900">
+      <main className="mx-auto flex w-full max-w-6xl flex-col gap-10">
+        <header className="flex flex-col gap-6">
+          <div className="flex items-center gap-3">
+            <span className="rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs uppercase tracking-[0.3em] text-slate-500">
+              CSV → Webhook
+            </span>
+            <span className="text-sm text-slate-500">No server required</span>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
+            <div className="flex flex-col gap-4">
+              <h1 className="text-balance text-4xl font-(--font-fraunces) leading-tight text-slate-900 sm:text-5xl">
+                Map any CSV to clean webhook payloads in three quick steps.
+              </h1>
+              <p className="max-w-2xl text-base text-slate-600 sm:text-lg">
+                Upload a CSV, confirm the field mapping, then send each row in
+                order to your webhook. Remove anything you do not want to
+                forward.
+              </p>
+            </div>
+            <FlowCard
+              step={step}
+              sending={sending}
+              headersCount={headers.length}
+              mappingCount={mapping.length}
+              onStepChange={setStep}
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
+          </div>
+        </header>
+
+        {step === 1 ? (
+          <StepUpload
+            csvName={csvName}
+            headersCount={headers.length}
+            rowCount={rowCount}
+            onFile={handleFile}
+            onReset={resetFlow}
+          />
+        ) : null}
+
+        {step === 2 ? (
+          <StepMapping
+            mapping={mapping}
+            includedCount={includedCount}
+            examplePayload={examplePayload}
+            onUpdateMapping={updateMapping}
+            onNext={() => setStep(3)}
+            onBack={() => setStep(1)}
+          />
+        ) : null}
+
+        {step === 3 ? (
+          <StepWebhook
+            webhookUrl={webhookUrl}
+            rowCount={rowCount}
+            includedCount={includedCount}
+            sending={sending}
+            sentCount={sentCount}
+            failCount={failCount}
+            error={error}
+            lastError={lastError}
+            failedRows={failedRows}
+            onWebhookChange={setWebhookUrl}
+            onSend={sendToWebhook}
+            onStop={stopSending}
+            onBack={() => setStep(2)}
+            onReset={resetFlow}
+          />
+        ) : null}
+
+        {step === 3 ? (
+          <FailedRows
+            rows={failedRows}
+            sending={sending}
+            onRetry={retryFailed}
+            onRemove={removeFailed}
+          />
+        ) : null}
       </main>
     </div>
   );
