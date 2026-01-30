@@ -260,7 +260,9 @@ export default function Home() {
             <span className="rounded-full border border-slate-200 bg-white/70 px-3 py-1 text-xs uppercase tracking-[0.3em] text-slate-500">
               CSV → Webhook
             </span>
-            <span className="text-sm text-slate-500">No server required</span>
+            <span className="text-sm text-slate-500">
+              No server required · We never store your CSV on our servers
+            </span>
           </div>
           <div className="grid gap-4 lg:grid-cols-[1.1fr_0.9fr] lg:items-end">
             <div className="flex flex-col gap-4">
@@ -331,6 +333,20 @@ export default function Home() {
             onRemove={removeFailed}
           />
         ) : null}
+
+        <footer className="flex flex-col items-center justify-between gap-3 border-t border-slate-200/70 pt-6 text-xs text-slate-500 sm:flex-row">
+          <a className="hover:text-slate-700" href="/privacy-policy">
+            Privacy Policy
+          </a>
+          <a
+            className="hover:text-slate-700"
+            href="https://www.zacsalazar.com/"
+            target="_blank"
+            rel="noreferrer"
+          >
+            © {new Date().getFullYear()} Zac Salazar
+          </a>
+        </footer>
       </main>
     </div>
   );
