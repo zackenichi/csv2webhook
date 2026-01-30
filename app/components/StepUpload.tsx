@@ -19,7 +19,8 @@ export default function StepUpload({
         <h2 className="text-lg font-semibold text-slate-900">Upload a CSV</h2>
         <p className="mt-2 text-sm text-slate-600">
           We only read headers and rows locally in your browser. Nothing is
-          uploaded until you choose a webhook.
+          uploaded until you choose a webhook, and we never store your CSV on
+          our servers.
         </p>
         <label className="mt-6 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300/80 bg-white/80 px-6 py-10 text-center transition hover:border-slate-400">
           <input
