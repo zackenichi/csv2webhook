@@ -109,5 +109,6 @@ export const buildMapping = (headers: string[], sampleRow: string[]): MappingRow
       key: defaultKey,
       enabled: defaultKey.length > 0,
       sample: sampleRow[index] ?? "",
+      source: "csv",
     };
   });
