@@ -10,6 +10,7 @@ type StepWebhookProps = {
   error: string;
   lastError: string;
   failedRows: FailedRow[];
+  webhookValid: boolean;
   onWebhookChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
@@ -27,6 +28,7 @@ export default function StepWebhook({
   error,
   lastError,
   failedRows,
+  webhookValid,
   onWebhookChange,
   onSend,
   onStop,
@@ -59,12 +61,17 @@ export default function StepWebhook({
             value={webhookUrl}
             onChange={(event) => onWebhookChange(event.target.value)}
           />
+          {webhookUrl && !webhookValid ? (
+            <div className="text-xs text-rose-600">
+              Enter a valid URL or domain. We'll assume https:// if it's missing.
+            </div>
+          ) : null}
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
               className="flex-1 rounded-2xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white transition hover:scale-[1.01] hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={onSend}
-              disabled={sending}
+              disabled={sending || !webhookValid}
             >
               {sending
                 ? `Sending ${sentCount}/${rowCount}`
@@ -119,7 +126,8 @@ export default function StepWebhook({
             {includedCount || "No"} fields included in payload
           </div>
           <div className="rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3">
-            Webhook: {webhookUrl ? "Ready" : "Add a URL"}
+            Webhook:{" "}
+            {webhookUrl ? (webhookValid ? "Ready" : "Invalid URL") : "Add a URL"}
           </div>
           <button
             type="button"

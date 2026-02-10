@@ -3,6 +3,8 @@ export type MappingRow = {
   key: string;
   enabled: boolean;
   sample: string;
+  source: "csv" | "static";
+  value?: string;
 };
 
 export type FailedRow = {

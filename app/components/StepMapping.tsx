@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { MappingRow } from "@/app/lib/types";
 
 type StepMappingProps = {
@@ -5,6 +6,7 @@ type StepMappingProps = {
   includedCount: number;
   examplePayload: Record<string, string> | null;
   onUpdateMapping: (index: number, updates: Partial<MappingRow>) => void;
+  onAddStaticField: (field: { key: string; value: string }) => void;
   onNext: () => void;
   onBack: () => void;
 };
@@ -14,9 +16,26 @@ export default function StepMapping({
   includedCount,
   examplePayload,
   onUpdateMapping,
+  onAddStaticField,
   onNext,
   onBack,
 }: StepMappingProps) {
+  const [staticKey, setStaticKey] = useState("");
+  const [staticValue, setStaticValue] = useState("");
+  const [staticError, setStaticError] = useState("");
+
+  const handleAddStatic = () => {
+    const trimmedKey = staticKey.trim();
+    if (!trimmedKey) {
+      setStaticError("Add a field key to continue.");
+      return;
+    }
+    onAddStaticField({ key: trimmedKey, value: staticValue });
+    setStaticKey("");
+    setStaticValue("");
+    setStaticError("");
+  };
+
   return (
     <section className="grid gap-6 lg:grid-cols-[0.9fr_1.1fr]">
       <div className="rounded-3xl border border-slate-200/70 bg-white/70 p-6">
@@ -47,14 +66,20 @@ export default function StepMapping({
               >
                 <div>
                   <div className="text-xs uppercase tracking-[0.25em] text-slate-400">
-                    Header
+                    {item.source === "static" ? "Static" : "Header"}
                   </div>
                   <div className="mt-1 text-sm text-slate-900">
                     {item.header}
                   </div>
-                  <div className="mt-2 text-xs text-slate-500">
-                    Sample: {item.sample || "—"}
-                  </div>
+                  {item.source === "static" ? (
+                    <div className="mt-2 text-xs text-slate-500">
+                      Value used for every row.
+                    </div>
+                  ) : (
+                    <div className="mt-2 text-xs text-slate-500">
+                      Sample: {item.sample || "—"}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <div className="text-xs uppercase tracking-[0.25em] text-slate-400">
@@ -68,6 +93,16 @@ export default function StepMapping({
                     }
                     placeholder="mappedField"
                   />
+                  {item.source === "static" ? (
+                    <input
+                      className="mt-3 w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+                      value={item.value ?? ""}
+                      onChange={(event) =>
+                        onUpdateMapping(index, { value: event.target.value })
+                      }
+                      placeholder="Static value"
+                    />
+                  ) : null}
                 </div>
                 <div className="flex items-center">
                   <button
@@ -87,6 +122,38 @@ export default function StepMapping({
               </div>
             ))
           )}
+        </div>
+        <div className="mt-5 rounded-2xl border border-slate-200/70 bg-white/80 p-4">
+          <div className="text-xs uppercase tracking-[0.25em] text-slate-400">
+            Add static field
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
+            <input
+              className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+              value={staticKey}
+              onChange={(event) => {
+                setStaticKey(event.target.value);
+                setStaticError("");
+              }}
+              placeholder="fieldKey"
+            />
+            <input
+              className="w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+              value={staticValue}
+              onChange={(event) => setStaticValue(event.target.value)}
+              placeholder="Same value for every row"
+            />
+            <button
+              type="button"
+              className="rounded-full border border-slate-300/70 bg-white/80 px-4 py-2 text-xs uppercase tracking-[0.25em] text-slate-500 transition hover:border-slate-400"
+              onClick={handleAddStatic}
+            >
+              Add
+            </button>
+          </div>
+          {staticError ? (
+            <div className="mt-2 text-xs text-rose-600">{staticError}</div>
+          ) : null}
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
           <span>

@@ -27,11 +27,36 @@ export default function Home() {
   const includedCount = mapping.filter((item) => item.enabled).length;
   const failCount = failedRows.length;
 
+  const normalizeWebhookUrl = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return "";
+    if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(trimmed)) return trimmed;
+    return `https://${trimmed}`;
+  };
+
+  const normalizedWebhookUrl = normalizeWebhookUrl(webhookUrl);
+
+  const isValidWebhookUrl = (value: string) => {
+    if (!value) return false;
+    try {
+      const url = new URL(value);
+      return url.protocol === 'http:' || url.protocol === 'https:';
+    } catch {
+      return false;
+    }
+  };
+
+  const webhookValid = isValidWebhookUrl(normalizedWebhookUrl);
+
   const examplePayload = useMemo(() => {
     if (!rows.length || !mapping.length) return null;
     const payload: Record<string, string> = {};
     mapping.forEach((item, index) => {
       if (!item.enabled) return;
+      if (item.source === 'static') {
+        payload[item.key] = item.value ?? '';
+        return;
+      }
       payload[item.key] = rows[0]?.[index] ?? '';
     });
     return payload;
@@ -71,6 +96,20 @@ export default function Home() {
     );
   };
 
+  const addStaticField = (field: { key: string; value: string }) => {
+    setMapping((current) => [
+      ...current,
+      {
+        header: `Static value ${current.filter((item) => item.source === 'static').length + 1}`,
+        key: field.key,
+        enabled: true,
+        sample: '',
+        source: 'static',
+        value: field.value,
+      },
+    ]);
+  };
+
   const resetFlow = () => {
     cancelRef.current = false;
     setCsvName('');
@@ -89,6 +128,10 @@ export default function Home() {
     const payload: Record<string, string> = {};
     mapping.forEach((item, index) => {
       if (!item.enabled) return;
+      if (item.source === 'static') {
+        payload[item.key] = item.value ?? '';
+        return;
+      }
       payload[item.key] = row?.[index] ?? '';
     });
     return payload;
@@ -108,7 +151,7 @@ export default function Home() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ url: webhookUrl, payload }),
+      body: JSON.stringify({ url: normalizedWebhookUrl, payload }),
     });
 
     if (!response.ok) {
@@ -120,8 +163,12 @@ export default function Home() {
 
   const sendToWebhook = async () => {
     cancelRef.current = false;
-    if (!webhookUrl) {
+    if (!webhookUrl.trim()) {
       setError('Add a webhook URL to continue.');
+      return;
+    }
+    if (!webhookValid) {
+      setError('Enter a valid webhook URL or domain.');
       return;
     }
     if (!rows.length) {
@@ -301,6 +348,7 @@ export default function Home() {
             includedCount={includedCount}
             examplePayload={examplePayload}
             onUpdateMapping={updateMapping}
+            onAddStaticField={addStaticField}
             onNext={() => setStep(3)}
             onBack={() => setStep(1)}
           />
@@ -317,6 +365,7 @@ export default function Home() {
             error={error}
             lastError={lastError}
             failedRows={failedRows}
+            webhookValid={webhookValid}
             onWebhookChange={setWebhookUrl}
             onSend={sendToWebhook}
             onStop={stopSending}
