@@ -3,6 +3,10 @@ import type { FailedRow } from "@/app/lib/types";
 type StepWebhookProps = {
   webhookUrl: string;
   rowCount: number;
+  startRow: string;
+  rowsToSend: number;
+  concurrency: string;
+  concurrencyValue: number;
   includedCount: number;
   sending: boolean;
   sentCount: number;
@@ -12,6 +16,8 @@ type StepWebhookProps = {
   failedRows: FailedRow[];
   webhookValid: boolean;
   onWebhookChange: (value: string) => void;
+  onStartRowChange: (value: string) => void;
+  onConcurrencyChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
   onBack: () => void;
@@ -21,6 +27,10 @@ type StepWebhookProps = {
 export default function StepWebhook({
   webhookUrl,
   rowCount,
+  startRow,
+  rowsToSend,
+  concurrency,
+  concurrencyValue,
   includedCount,
   sending,
   sentCount,
@@ -30,6 +40,8 @@ export default function StepWebhook({
   failedRows,
   webhookValid,
   onWebhookChange,
+  onStartRowChange,
+  onConcurrencyChange,
   onSend,
   onStop,
   onBack,
@@ -52,7 +64,7 @@ export default function StepWebhook({
         </div>
         <p className="mt-2 text-sm text-slate-600">
           After mapping is ready, add your webhook URL. We will POST each row in
-          order.
+          order when concurrency is set to 1.
         </p>
         <div className="mt-6 flex flex-col gap-3">
           <input
@@ -61,6 +73,50 @@ export default function StepWebhook({
             value={webhookUrl}
             onChange={(event) => onWebhookChange(event.target.value)}
           />
+          <div className="grid gap-2">
+            <label
+              htmlFor="start-row"
+              className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+            >
+              Start from row
+            </label>
+            <input
+              id="start-row"
+              type="number"
+              min="1"
+              step="1"
+              inputMode="numeric"
+              className="w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+              placeholder="1"
+              value={startRow}
+              onChange={(event) => onStartRowChange(event.target.value)}
+            />
+          </div>
+          <div className="grid gap-2">
+            <label
+              htmlFor="concurrency"
+              className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+            >
+              Concurrency
+            </label>
+            <input
+              id="concurrency"
+              type="number"
+              min="1"
+              max="20"
+              step="1"
+              inputMode="numeric"
+              className="w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+              placeholder="1"
+              value={concurrency}
+              onChange={(event) => onConcurrencyChange(event.target.value)}
+            />
+            <div className="text-xs text-slate-500">
+              {concurrencyValue === 1
+                ? 'Rows are sent one at a time in order.'
+                : `Up to ${concurrencyValue} rows send at once. Delivery order is not guaranteed.`}
+            </div>
+          </div>
           {webhookUrl && !webhookValid ? (
             <div className="text-xs text-rose-600">
               Enter a valid URL or domain. We'll assume https:// if it's missing.
@@ -74,8 +130,8 @@ export default function StepWebhook({
               disabled={sending || !webhookValid}
             >
               {sending
-                ? `Sending ${sentCount}/${rowCount}`
-                : `Send ${rowCount || ""} rows`}
+                ? `Sending ${sentCount}/${rowsToSend}`
+                : `Send ${rowsToSend || ""} rows`}
             </button>
             {sending ? (
               <button
@@ -121,6 +177,12 @@ export default function StepWebhook({
         <div className="mt-4 space-y-3 text-sm text-slate-600">
           <div className="rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3">
             {rowCount || "No"} rows ready to send
+          </div>
+          <div className="rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3">
+            Start from row {startRow || "1"}
+          </div>
+          <div className="rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3">
+            Concurrency {concurrencyValue}
           </div>
           <div className="rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3">
             {includedCount || "No"} fields included in payload
