@@ -88,7 +88,7 @@ export default function Home() {
     setHeaders(sanitizedHeaders);
     setRows(dataRows);
     setMapping(buildMapping(sanitizedHeaders, dataRows[0] ?? []));
-    setStep(2);
+    goToStep(2);
   };
 
   const updateMapping = (index: number, updates: Partial<MappingRow>) => {
@@ -115,6 +115,8 @@ export default function Home() {
 
   const resetFlow = () => {
     cancelRef.current = false;
+    dragDepthRef.current = 0;
+    setIsDraggingFile(false);
     setCsvName('');
     setHeaders([]);
     setRows([]);
@@ -302,12 +304,16 @@ export default function Home() {
     setFailedRows((current) => current.filter((item) => item.index !== index));
   };
 
-  useEffect(() => {
-    if (step !== 1) {
+  const goToStep = (nextStep: 1 | 2 | 3) => {
+    if (nextStep !== 1) {
       dragDepthRef.current = 0;
       setIsDraggingFile(false);
-      return;
     }
+    setStep(nextStep);
+  };
+
+  useEffect(() => {
+    if (step !== 1) return;
 
     const preventBrowserDrop = (event: globalThis.DragEvent) => {
       if (!event.dataTransfer?.types.includes('Files')) return;
@@ -377,7 +383,7 @@ export default function Home() {
               sending={sending}
               headersCount={headers.length}
               mappingCount={mapping.length}
-              onStepChange={setStep}
+              onStepChange={goToStep}
             />
           </div>
         </header>
@@ -404,8 +410,8 @@ export default function Home() {
             examplePayload={examplePayload}
             onUpdateMapping={updateMapping}
             onAddStaticField={addStaticField}
-            onNext={() => setStep(3)}
-            onBack={() => setStep(1)}
+            onNext={() => goToStep(3)}
+            onBack={() => goToStep(1)}
           />
         ) : null}
 
@@ -424,7 +430,7 @@ export default function Home() {
             onWebhookChange={setWebhookUrl}
             onSend={sendToWebhook}
             onStop={stopSending}
-            onBack={() => setStep(2)}
+            onBack={() => goToStep(2)}
             onReset={resetFlow}
           />
         ) : null}
