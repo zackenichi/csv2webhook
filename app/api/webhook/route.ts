@@ -34,15 +34,14 @@ export async function POST(request: Request) {
       body: JSON.stringify(body.payload ?? {}),
     });
 
-    const contentType = response.headers.get("content-type") ?? "text/plain";
-    const text = await response.text();
-
-    return new Response(text, {
-      status: response.status,
-      headers: {
-        "content-type": contentType,
+    return NextResponse.json(
+      {
+        ok: response.ok,
+        status: response.status,
+        statusText: response.statusText,
       },
-    });
+      { status: response.status },
+    );
   } catch (error) {
     return NextResponse.json(
       {

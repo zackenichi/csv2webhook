@@ -17,6 +17,8 @@ export default function Home() {
   const [mapping, setMapping] = useState<MappingRow[]>([]);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [startRow, setStartRow] = useState('1');
+  const [concurrency, setConcurrency] = useState('1');
   const [error, setError] = useState('');
   const [lastError, setLastError] = useState('');
   const [sending, setSending] = useState(false);
@@ -29,6 +31,16 @@ export default function Home() {
   const rowCount = rows.length;
   const includedCount = mapping.filter((item) => item.enabled).length;
   const failCount = failedRows.length;
+  const parsedStartRow = Number.parseInt(startRow, 10);
+  const startRowNumber = Number.isNaN(parsedStartRow)
+    ? 1
+    : Math.max(1, parsedStartRow);
+  const startRowIndex = startRowNumber - 1;
+  const rowsToSend = Math.max(0, rowCount - startRowIndex);
+  const parsedConcurrency = Number.parseInt(concurrency, 10);
+  const concurrencyValue = Number.isNaN(parsedConcurrency)
+    ? 1
+    : Math.min(20, Math.max(1, parsedConcurrency));
 
   const normalizeWebhookUrl = (value: string) => {
     const trimmed = value.trim();
@@ -88,6 +100,8 @@ export default function Home() {
     setHeaders(sanitizedHeaders);
     setRows(dataRows);
     setMapping(buildMapping(sanitizedHeaders, dataRows[0] ?? []));
+    setStartRow('1');
+    setConcurrency('1');
     goToStep(2);
   };
 
@@ -122,6 +136,8 @@ export default function Home() {
     setRows([]);
     setMapping([]);
     setWebhookUrl('');
+    setStartRow('1');
+    setConcurrency('1');
     setError('');
     setLastError('');
     setSentCount(0);
@@ -166,6 +182,70 @@ export default function Home() {
     }
   };
 
+  const processRows = async (
+    items: Array<{ index: number; payload: Record<string, string> }>,
+  ) => {
+    const remaining: FailedRow[] = [];
+    let nextItemIndex = 0;
+    let processedCount = 0;
+
+    const processItem = async (item: { index: number; payload: Record<string, string> }) => {
+      let attempt = 0;
+      let success = false;
+      let lastMessage = '';
+
+      while (attempt < 3 && !success && !cancelRef.current) {
+        try {
+          attempt += 1;
+          await sendPayload(item.payload, item.index);
+          success = true;
+        } catch (err) {
+          lastMessage =
+            err instanceof Error
+              ? err.message
+              : 'Row failed with a network error';
+          setLastError(lastMessage);
+          console.error('Webhook request failed', {
+            row: item.index + 1,
+            attempt,
+            error: err,
+          });
+          if (attempt < 3) {
+            await delay(750);
+          }
+        }
+      }
+
+      if (!success) {
+        remaining.push({
+          index: item.index,
+          payload: item.payload,
+          error: lastMessage || 'Row failed after 3 attempts.',
+        });
+      }
+
+      processedCount += 1;
+      setSentCount(processedCount);
+    };
+
+    const worker = async () => {
+      while (!cancelRef.current) {
+        const currentIndex = nextItemIndex;
+        nextItemIndex += 1;
+        if (currentIndex >= items.length) {
+          return;
+        }
+        await processItem(items[currentIndex]);
+      }
+    };
+
+    await Promise.all(
+      Array.from({ length: Math.min(concurrencyValue, items.length) }, () => worker()),
+    );
+
+    return { remaining, processedCount };
+  };
+
   const sendToWebhook = async () => {
     cancelRef.current = false;
     if (!webhookUrl.trim()) {
@@ -180,6 +260,10 @@ export default function Home() {
       setError('Your CSV has no data rows to send.');
       return;
     }
+    if (startRowIndex >= rows.length) {
+      setError(`Start row must be between 1 and ${rows.length}.`);
+      return;
+    }
     if (!includedCount) {
       setError('Include at least one field before sending.');
       return;
@@ -190,55 +274,17 @@ export default function Home() {
     setSending(true);
     setSentCount(0);
     setFailedRows([]);
-
-    for (let rowIndex = 0; rowIndex < rows.length; rowIndex += 1) {
-      if (cancelRef.current) {
-        setLastError(`Stopped after ${rowIndex} row(s).`);
-        break;
-      }
-      const row = rows[rowIndex];
-      const payload = buildPayloadForRow(row);
-      let attempt = 0;
-      let success = false;
-      let lastMessage = '';
-
-      while (attempt < 3 && !success && !cancelRef.current) {
-        try {
-          attempt += 1;
-          await sendPayload(payload, rowIndex);
-          success = true;
-        } catch (err) {
-          lastMessage =
-            err instanceof Error
-              ? err.message
-              : 'Row failed with a network error';
-          setLastError(lastMessage);
-          console.error('Webhook request failed', {
-            row: rowIndex + 1,
-            attempt,
-            error: err,
-          });
-          if (attempt < 3) {
-            await delay(750);
-          }
-        }
-      }
-
-      if (!success) {
-        setFailedRows((current) => [
-          ...current,
-          {
-            index: rowIndex,
-            payload,
-            error: lastMessage || 'Row failed after 3 attempts.',
-          },
-        ]);
-      }
-
-      setSentCount((count) => count + 1);
-    }
+    const items = rows.slice(startRowIndex).map((row, offset) => ({
+      index: startRowIndex + offset,
+      payload: buildPayloadForRow(row),
+    }));
+    const { remaining, processedCount } = await processRows(items);
+    setFailedRows(remaining);
 
     setSending(false);
+    if (cancelRef.current) {
+      setLastError(`Stopped after ${processedCount} row(s).`);
+    }
     if (!cancelRef.current) {
       setLastError("");
     }
@@ -253,48 +299,18 @@ export default function Home() {
     cancelRef.current = false;
     setSending(true);
     setLastError('');
+    setSentCount(0);
 
-    const remaining: FailedRow[] = [];
-
-    for (let i = 0; i < failedRows.length; i += 1) {
-      if (cancelRef.current) {
-        remaining.push(...failedRows.slice(i));
-        break;
-      }
-      const item = failedRows[i];
-      let attempt = 0;
-      let success = false;
-      let lastMessage = item.error;
-
-      while (attempt < 3 && !success && !cancelRef.current) {
-        try {
-          attempt += 1;
-          await sendPayload(item.payload, item.index);
-          success = true;
-        } catch (err) {
-          lastMessage =
-            err instanceof Error
-              ? err.message
-              : 'Row failed with a network error';
-          setLastError(lastMessage);
-          console.error('Webhook retry failed', {
-            row: item.index + 1,
-            attempt,
-            error: err,
-          });
-          if (attempt < 3) {
-            await delay(750);
-          }
-        }
-      }
-
-      if (!success) {
-        remaining.push({ ...item, error: lastMessage });
-      }
-    }
-
+    const items = failedRows.map((item) => ({
+      index: item.index,
+      payload: item.payload,
+    }));
+    const { remaining, processedCount } = await processRows(items);
     setFailedRows(remaining);
     setSending(false);
+    if (cancelRef.current) {
+      setLastError(`Stopped after ${processedCount} row(s).`);
+    }
     if (!cancelRef.current) {
       setLastError("");
     }
@@ -419,6 +435,10 @@ export default function Home() {
           <StepWebhook
             webhookUrl={webhookUrl}
             rowCount={rowCount}
+            startRow={startRow}
+            rowsToSend={rowsToSend}
+            concurrency={concurrency}
+            concurrencyValue={concurrencyValue}
             includedCount={includedCount}
             sending={sending}
             sentCount={sentCount}
@@ -428,6 +448,8 @@ export default function Home() {
             failedRows={failedRows}
             webhookValid={webhookValid}
             onWebhookChange={setWebhookUrl}
+            onStartRowChange={setStartRow}
+            onConcurrencyChange={setConcurrency}
             onSend={sendToWebhook}
             onStop={stopSending}
             onBack={() => goToStep(2)}
