@@ -1,7 +1,14 @@
+import type { DragEvent } from 'react';
+
 type StepUploadProps = {
   csvName: string;
   headersCount: number;
   rowCount: number;
+  isDragging: boolean;
+  onDragEnter: () => void;
+  onDragLeave: () => void;
+  onDragOver: (event: DragEvent<HTMLElement>) => void;
+  onDrop: (event: DragEvent<HTMLElement>) => void;
   onFile: (file: File | null) => void;
   onReset: () => void;
 };
@@ -10,6 +17,11 @@ export default function StepUpload({
   csvName,
   headersCount,
   rowCount,
+  isDragging,
+  onDragEnter,
+  onDragLeave,
+  onDragOver,
+  onDrop,
   onFile,
   onReset,
 }: StepUploadProps) {
@@ -22,7 +34,17 @@ export default function StepUpload({
           uploaded until you choose a webhook, and we never store your CSV on
           our servers.
         </p>
-        <label className="mt-6 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-slate-300/80 bg-white/80 px-6 py-10 text-center transition hover:border-slate-400">
+        <label
+          className={`mt-6 flex cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed px-6 py-10 text-center transition ${
+            isDragging
+              ? 'border-slate-500 bg-slate-900/5 shadow-[0_0_0_6px_rgba(15,23,42,0.06)]'
+              : 'border-slate-300/80 bg-white/80 hover:border-slate-400'
+          }`}
+          onDragEnter={onDragEnter}
+          onDragLeave={onDragLeave}
+          onDragOver={onDragOver}
+          onDrop={onDrop}
+        >
           <input
             type="file"
             accept=".csv,text/csv"
@@ -31,10 +53,14 @@ export default function StepUpload({
           />
           <div className="text-3xl">📄</div>
           <div className="text-sm text-slate-700">
-            Drop a CSV or click to browse
+            {isDragging ? 'Release to upload your CSV' : 'Drop a CSV or click to browse'}
           </div>
           <div className="text-xs text-slate-500">
-            {csvName ? `Loaded: ${csvName}` : "Max size depends on browser"}
+            {isDragging
+              ? 'Drop the file anywhere inside this area'
+              : csvName
+                ? `Loaded: ${csvName}`
+                : 'Max size depends on browser'}
           </div>
         </label>
         <div className="mt-6 flex flex-wrap items-center gap-3">
