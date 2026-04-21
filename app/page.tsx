@@ -1,6 +1,7 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import type { DragEvent } from 'react';
 import FailedRows from '@/app/components/FailedRows';
 import FlowCard from '@/app/components/FlowCard';
 import StepMapping from '@/app/components/StepMapping';
@@ -22,6 +23,8 @@ export default function Home() {
   const [sentCount, setSentCount] = useState(0);
   const [failedRows, setFailedRows] = useState<FailedRow[]>([]);
   const cancelRef = useRef(false);
+  const dragDepthRef = useRef(0);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
 
   const rowCount = rows.length;
   const includedCount = mapping.filter((item) => item.enabled).length;
@@ -85,7 +88,7 @@ export default function Home() {
     setHeaders(sanitizedHeaders);
     setRows(dataRows);
     setMapping(buildMapping(sanitizedHeaders, dataRows[0] ?? []));
-    setStep(2);
+    goToStep(2);
   };
 
   const updateMapping = (index: number, updates: Partial<MappingRow>) => {
@@ -112,6 +115,8 @@ export default function Home() {
 
   const resetFlow = () => {
     cancelRef.current = false;
+    dragDepthRef.current = 0;
+    setIsDraggingFile(false);
     setCsvName('');
     setHeaders([]);
     setRows([]);
@@ -299,6 +304,57 @@ export default function Home() {
     setFailedRows((current) => current.filter((item) => item.index !== index));
   };
 
+  const goToStep = (nextStep: 1 | 2 | 3) => {
+    if (nextStep !== 1) {
+      dragDepthRef.current = 0;
+      setIsDraggingFile(false);
+    }
+    setStep(nextStep);
+  };
+
+  useEffect(() => {
+    if (step !== 1) return;
+
+    const preventBrowserDrop = (event: globalThis.DragEvent) => {
+      if (!event.dataTransfer?.types.includes('Files')) return;
+      event.preventDefault();
+    };
+
+    window.addEventListener('dragover', preventBrowserDrop);
+    window.addEventListener('drop', preventBrowserDrop);
+
+    return () => {
+      window.removeEventListener('dragover', preventBrowserDrop);
+      window.removeEventListener('drop', preventBrowserDrop);
+    };
+  }, [step]);
+
+  const handleDragEnter = () => {
+    dragDepthRef.current += 1;
+    setIsDraggingFile(true);
+  };
+
+  const handleDragLeave = () => {
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setIsDraggingFile(false);
+    }
+  };
+
+  const handleDragOver = (event: DragEvent<HTMLElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  };
+
+  const handleDrop = (event: DragEvent<HTMLElement>) => {
+    event.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDraggingFile(false);
+    const file = event.dataTransfer.files?.[0] ?? null;
+    void handleFile(file);
+  };
+
   return (
     <div className="min-h-screen bg-[radial-gradient(circle_at_top,rgba(255,217,148,0.45),transparent_55%),radial-gradient(circle_at_20%_30%,rgba(141,199,255,0.35),transparent_50%),radial-gradient(circle_at_80%_60%,rgba(255,168,168,0.35),transparent_55%),linear-gradient(180deg,#e9e6df,#dde3ee)] px-6 py-12 text-slate-900">
       <main className="mx-auto flex w-full max-w-6xl flex-col gap-10">
@@ -327,7 +383,7 @@ export default function Home() {
               sending={sending}
               headersCount={headers.length}
               mappingCount={mapping.length}
-              onStepChange={setStep}
+              onStepChange={goToStep}
             />
           </div>
         </header>
@@ -337,6 +393,11 @@ export default function Home() {
             csvName={csvName}
             headersCount={headers.length}
             rowCount={rowCount}
+            isDragging={isDraggingFile}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
             onFile={handleFile}
             onReset={resetFlow}
           />
@@ -349,8 +410,8 @@ export default function Home() {
             examplePayload={examplePayload}
             onUpdateMapping={updateMapping}
             onAddStaticField={addStaticField}
-            onNext={() => setStep(3)}
-            onBack={() => setStep(1)}
+            onNext={() => goToStep(3)}
+            onBack={() => goToStep(1)}
           />
         ) : null}
 
@@ -369,7 +430,7 @@ export default function Home() {
             onWebhookChange={setWebhookUrl}
             onSend={sendToWebhook}
             onStop={stopSending}
-            onBack={() => setStep(2)}
+            onBack={() => goToStep(2)}
             onReset={resetFlow}
           />
         ) : null}
