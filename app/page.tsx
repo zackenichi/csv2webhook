@@ -31,6 +31,7 @@ export default function Home() {
   const rowCount = rows.length;
   const includedCount = mapping.filter((item) => item.enabled).length;
   const failCount = failedRows.length;
+  const includedFields = mapping.filter((item) => item.enabled);
   const parsedStartRow = Number.parseInt(startRow, 10);
   const startRowNumber = Number.isNaN(parsedStartRow)
     ? 1
@@ -63,6 +64,19 @@ export default function Home() {
 
   const webhookValid = isValidWebhookUrl(normalizedWebhookUrl);
 
+  const buildPayloadForRow = (row: string[]) => {
+    const payload: Record<string, string> = {};
+    mapping.forEach((item, index) => {
+      if (!item.enabled) return;
+      if (item.source === 'static') {
+        payload[item.key] = item.value ?? '';
+        return;
+      }
+      payload[item.key] = row?.[index] ?? '';
+    });
+    return payload;
+  };
+
   const examplePayload = useMemo(() => {
     if (!rows.length || !mapping.length) return null;
     const payload: Record<string, string> = {};
@@ -76,6 +90,12 @@ export default function Home() {
     });
     return payload;
   }, [mapping, rows]);
+
+  const startRowPreview = useMemo(() => {
+    if (!rows.length || !includedCount) return null;
+    if (startRowIndex < 0 || startRowIndex >= rows.length) return null;
+    return buildPayloadForRow(rows[startRowIndex] ?? []);
+  }, [includedCount, rows, startRowIndex, mapping]);
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
@@ -143,19 +163,6 @@ export default function Home() {
     setSentCount(0);
     setFailedRows([]);
     setStep(1);
-  };
-
-  const buildPayloadForRow = (row: string[]) => {
-    const payload: Record<string, string> = {};
-    mapping.forEach((item, index) => {
-      if (!item.enabled) return;
-      if (item.source === 'static') {
-        payload[item.key] = item.value ?? '';
-        return;
-      }
-      payload[item.key] = row?.[index] ?? '';
-    });
-    return payload;
   };
 
   const delay = (ms: number) =>
@@ -433,6 +440,8 @@ export default function Home() {
 
         {step === 3 ? (
           <StepWebhook
+            headers={headers}
+            rows={rows}
             webhookUrl={webhookUrl}
             rowCount={rowCount}
             startRow={startRow}
@@ -440,6 +449,8 @@ export default function Home() {
             concurrency={concurrency}
             concurrencyValue={concurrencyValue}
             includedCount={includedCount}
+            startRowPreview={startRowPreview}
+            includedFields={includedFields}
             sending={sending}
             sentCount={sentCount}
             failCount={failCount}

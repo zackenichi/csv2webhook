@@ -13,6 +13,8 @@ export default function FlowCard({
   mappingCount,
   onStepChange,
 }: FlowCardProps) {
+  const waitingClass = "text-amber-500";
+
   return (
     <div className="rounded-3xl border border-slate-200/70 bg-white/60 p-6 shadow-[0_18px_50px_rgba(100,116,139,0.18)] backdrop-blur">
       <div className="flex items-center justify-between text-xs uppercase tracking-[0.3em] text-slate-400">
@@ -37,7 +39,9 @@ export default function FlowCard({
           disabled={headersCount === 0}
         >
           <span>2. Map fields</span>
-          <span className="text-emerald-500">
+          <span
+            className={step === 2 || step >= 3 ? "text-emerald-500" : waitingClass}
+          >
             {step >= 3 ? "Done" : step === 2 ? "In progress" : "Waiting"}
           </span>
         </button>
@@ -48,8 +52,8 @@ export default function FlowCard({
           disabled={mappingCount === 0}
         >
           <span>3. Send webhook</span>
-          <span className="text-emerald-500">
-            {sending ? "Sending" : step === 3 ? "Open" : "Waiting"}
+          <span className={sending ? "text-emerald-500" : waitingClass}>
+            {sending ? "Sending" : "Waiting"}
           </span>
         </button>
       </div>
