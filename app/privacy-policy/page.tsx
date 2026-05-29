@@ -1,11 +1,13 @@
+import Link from 'next/link';
+
 export default function PrivacyPolicyPage() {
   return (
     <div className="min-h-screen bg-slate-50 px-6 py-12 text-slate-900">
       <main className="mx-auto flex w-full max-w-3xl flex-col gap-6">
         <header className="space-y-2">
-          <a className="text-xs uppercase tracking-[0.3em] text-slate-500 hover:text-slate-700" href="/">
+          <Link className="text-xs uppercase tracking-[0.3em] text-slate-500 hover:text-slate-700" href="/">
             ← Back to app
-          </a>
+          </Link>
           <p className="text-xs uppercase tracking-[0.3em] text-slate-500">
             Privacy Policy
           </p>

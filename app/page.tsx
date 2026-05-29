@@ -91,11 +91,10 @@ export default function Home() {
     return payload;
   }, [mapping, rows]);
 
-  const startRowPreview = useMemo(() => {
-    if (!rows.length || !includedCount) return null;
-    if (startRowIndex < 0 || startRowIndex >= rows.length) return null;
-    return buildPayloadForRow(rows[startRowIndex] ?? []);
-  }, [includedCount, rows, startRowIndex, mapping]);
+  const startRowPreview =
+    !rows.length || !includedCount || startRowIndex < 0 || startRowIndex >= rows.length
+      ? null
+      : buildPayloadForRow(rows[startRowIndex] ?? []);
 
   const handleFile = async (file: File | null) => {
     if (!file) return;
@@ -443,7 +442,6 @@ export default function Home() {
             headers={headers}
             rows={rows}
             webhookUrl={webhookUrl}
-            rowCount={rowCount}
             startRow={startRow}
             rowsToSend={rowsToSend}
             concurrency={concurrency}

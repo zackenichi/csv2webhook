@@ -5,7 +5,6 @@ type StepWebhookProps = {
   headers: string[];
   rows: string[][];
   webhookUrl: string;
-  rowCount: number;
   startRow: string;
   rowsToSend: number;
   concurrency: string;
@@ -38,7 +37,6 @@ export default function StepWebhook({
   headers,
   rows,
   webhookUrl,
-  rowCount,
   startRow,
   rowsToSend,
   concurrency,
@@ -170,7 +168,7 @@ export default function StepWebhook({
           </div>
           {webhookUrl && !webhookValid ? (
             <div className="text-xs text-rose-600">
-              Enter a valid URL or domain. We'll assume https:// if it's missing.
+              Enter a valid URL or domain. We&apos;ll assume https:// if it&apos;s missing.
             </div>
           ) : null}
           <div className="flex flex-col gap-3 sm:flex-row">
