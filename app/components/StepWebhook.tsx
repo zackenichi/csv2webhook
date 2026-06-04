@@ -1,15 +1,17 @@
 import { useEffect, useState } from "react";
-import type { FailedRow } from "@/app/lib/types";
+import type { FailedRow, WebhookHeader } from "@/app/lib/types";
 
 type StepWebhookProps = {
   headers: string[];
   rows: string[][];
   webhookUrl: string;
+  webhookHeaders: WebhookHeader[];
   startRow: string;
   rowsToSend: number;
   concurrency: string;
   concurrencyValue: number;
   includedCount: number;
+  activeHeaderCount: number;
   startRowPreview: Record<string, string> | null;
   includedFields: Array<{
     header: string;
@@ -25,6 +27,9 @@ type StepWebhookProps = {
   failedRows: FailedRow[];
   webhookValid: boolean;
   onWebhookChange: (value: string) => void;
+  onAddWebhookHeader: () => void;
+  onUpdateWebhookHeader: (index: number, updates: Partial<WebhookHeader>) => void;
+  onRemoveWebhookHeader: (index: number) => void;
   onStartRowChange: (value: string) => void;
   onConcurrencyChange: (value: string) => void;
   onSend: () => void;
@@ -37,11 +42,13 @@ export default function StepWebhook({
   headers,
   rows,
   webhookUrl,
+  webhookHeaders,
   startRow,
   rowsToSend,
   concurrency,
   concurrencyValue,
   includedCount,
+  activeHeaderCount,
   startRowPreview,
   includedFields,
   sending,
@@ -52,6 +59,9 @@ export default function StepWebhook({
   failedRows,
   webhookValid,
   onWebhookChange,
+  onAddWebhookHeader,
+  onUpdateWebhookHeader,
+  onRemoveWebhookHeader,
   onStartRowChange,
   onConcurrencyChange,
   onSend,
@@ -116,12 +126,21 @@ export default function StepWebhook({
           order when concurrency is set to 1.
         </p>
         <div className="mt-6 flex flex-col gap-3">
-          <input
-            className="w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
-            placeholder="https://hooks.example.com/..."
-            value={webhookUrl}
-            onChange={(event) => onWebhookChange(event.target.value)}
-          />
+          <div className="grid gap-2">
+            <label
+              htmlFor="webhook-url"
+              className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500"
+            >
+              Webhook URL
+            </label>
+            <input
+              id="webhook-url"
+              className="w-full rounded-2xl border border-slate-200/80 bg-white/90 px-4 py-3 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+              placeholder="https://hooks.example.com/..."
+              value={webhookUrl}
+              onChange={(event) => onWebhookChange(event.target.value)}
+            />
+          </div>
           <div className="grid gap-2">
             <label
               htmlFor="start-row"
@@ -171,6 +190,90 @@ export default function StepWebhook({
               Enter a valid URL or domain. We&apos;ll assume https:// if it&apos;s missing.
             </div>
           ) : null}
+          <div className="rounded-2xl border border-slate-200/70 bg-white/80 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+                Request headers
+              </div>
+              <button
+                type="button"
+                className="rounded-full border border-slate-300/70 bg-white px-4 py-2 text-xs uppercase tracking-[0.25em] text-slate-500 transition hover:border-slate-400 sm:self-start"
+                onClick={onAddWebhookHeader}
+                disabled={sending}
+              >
+                Add header
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {webhookHeaders.length ? (
+                webhookHeaders.map((header, index) => (
+                  <div
+                    key={`header-${index}`}
+                    className="rounded-2xl border border-slate-200/70 bg-white/90 p-4"
+                  >
+                    <div className="space-y-3">
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                          Header name
+                        </div>
+                        <input
+                          className="mt-2 w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+                          placeholder="x-api-key"
+                          value={header.key}
+                          onChange={(event) =>
+                            onUpdateWebhookHeader(index, { key: event.target.value })
+                          }
+                          disabled={sending}
+                        />
+                      </div>
+                      <div>
+                        <div className="text-xs uppercase tracking-[0.25em] text-slate-400">
+                          Header value
+                        </div>
+                        <input
+                          className="mt-2 w-full rounded-xl border border-slate-200/80 bg-white px-3 py-2 text-sm text-slate-900 placeholder:text-slate-400 focus:border-slate-400 focus:outline-none"
+                          placeholder="your-api-key"
+                          value={header.value}
+                          onChange={(event) =>
+                            onUpdateWebhookHeader(index, { value: event.target.value })
+                          }
+                          disabled={sending}
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center gap-3">
+                      <button
+                        type="button"
+                        className={`rounded-full px-4 py-2 text-xs uppercase tracking-[0.2em] transition ${
+                          header.enabled
+                            ? "border border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                            : "border border-slate-200/70 bg-white text-slate-500"
+                        }`}
+                        onClick={() =>
+                          onUpdateWebhookHeader(index, { enabled: !header.enabled })
+                        }
+                        disabled={sending}
+                      >
+                        {header.enabled ? "Included" : "Excluded"}
+                      </button>
+                      <button
+                        type="button"
+                        className="rounded-full border border-rose-300 bg-rose-50 px-4 py-2 text-xs uppercase tracking-[0.2em] text-rose-700 transition hover:bg-rose-100"
+                        onClick={() => onRemoveWebhookHeader(index)}
+                        disabled={sending}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-4 text-sm text-slate-500">
+                  No custom headers yet.
+                </div>
+              )}
+            </div>
+          </div>
           <div className="flex flex-col gap-3 sm:flex-row">
             <button
               type="button"
@@ -245,6 +348,9 @@ export default function StepWebhook({
           </button>
           <div className="rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3">
             Concurrency {concurrencyValue}
+          </div>
+          <div className="rounded-2xl border border-slate-200/70 bg-white/80 px-4 py-3">
+            {activeHeaderCount || "No"} custom header{activeHeaderCount === 1 ? "" : "s"} enabled
           </div>
           <button
             type="button"

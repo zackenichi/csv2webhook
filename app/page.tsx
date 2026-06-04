@@ -8,7 +8,7 @@ import StepMapping from '@/app/components/StepMapping';
 import StepUpload from '@/app/components/StepUpload';
 import StepWebhook from '@/app/components/StepWebhook';
 import { buildMapping, parseCSV } from '@/app/lib/csv';
-import type { FailedRow, MappingRow } from '@/app/lib/types';
+import type { FailedRow, MappingRow, WebhookHeader } from '@/app/lib/types';
 
 export default function Home() {
   const [csvName, setCsvName] = useState('');
@@ -17,6 +17,7 @@ export default function Home() {
   const [mapping, setMapping] = useState<MappingRow[]>([]);
   const [step, setStep] = useState<1 | 2 | 3>(1);
   const [webhookUrl, setWebhookUrl] = useState('');
+  const [webhookHeaders, setWebhookHeaders] = useState<WebhookHeader[]>([]);
   const [startRow, setStartRow] = useState('1');
   const [concurrency, setConcurrency] = useState('1');
   const [error, setError] = useState('');
@@ -63,6 +64,15 @@ export default function Home() {
   };
 
   const webhookValid = isValidWebhookUrl(normalizedWebhookUrl);
+  const activeWebhookHeaders = webhookHeaders.filter(
+    (header) => header.enabled && header.key.trim(),
+  );
+
+  const buildForwardHeaders = () =>
+    activeWebhookHeaders.reduce<Record<string, string>>((result, header) => {
+      result[header.key.trim()] = header.value;
+      return result;
+    }, {});
 
   const buildPayloadForRow = (row: string[]) => {
     const payload: Record<string, string> = {};
@@ -119,6 +129,7 @@ export default function Home() {
     setHeaders(sanitizedHeaders);
     setRows(dataRows);
     setMapping(buildMapping(sanitizedHeaders, dataRows[0] ?? []));
+    setWebhookHeaders([]);
     setStartRow('1');
     setConcurrency('1');
     goToStep(2);
@@ -155,6 +166,7 @@ export default function Home() {
     setRows([]);
     setMapping([]);
     setWebhookUrl('');
+    setWebhookHeaders([]);
     setStartRow('1');
     setConcurrency('1');
     setError('');
@@ -178,7 +190,11 @@ export default function Home() {
       headers: {
         'Content-Type': 'application/json',
       },
-      body: JSON.stringify({ url: normalizedWebhookUrl, payload }),
+      body: JSON.stringify({
+        url: normalizedWebhookUrl,
+        payload,
+        headers: buildForwardHeaders(),
+      }),
     });
 
     if (!response.ok) {
@@ -334,6 +350,27 @@ export default function Home() {
     setStep(nextStep);
   };
 
+  const addWebhookHeader = () => {
+    setWebhookHeaders((current) => [...current, { key: '', value: '', enabled: true }]);
+  };
+
+  const updateWebhookHeader = (
+    index: number,
+    updates: Partial<WebhookHeader>,
+  ) => {
+    setWebhookHeaders((current) =>
+      current.map((header, position) =>
+        position === index ? { ...header, ...updates } : header,
+      ),
+    );
+  };
+
+  const removeWebhookHeader = (index: number) => {
+    setWebhookHeaders((current) =>
+      current.filter((_, position) => position !== index),
+    );
+  };
+
   useEffect(() => {
     if (step !== 1) return;
 
@@ -442,11 +479,13 @@ export default function Home() {
             headers={headers}
             rows={rows}
             webhookUrl={webhookUrl}
+            webhookHeaders={webhookHeaders}
             startRow={startRow}
             rowsToSend={rowsToSend}
             concurrency={concurrency}
             concurrencyValue={concurrencyValue}
             includedCount={includedCount}
+            activeHeaderCount={activeWebhookHeaders.length}
             startRowPreview={startRowPreview}
             includedFields={includedFields}
             sending={sending}
@@ -457,6 +496,9 @@ export default function Home() {
             failedRows={failedRows}
             webhookValid={webhookValid}
             onWebhookChange={setWebhookUrl}
+            onAddWebhookHeader={addWebhookHeader}
+            onUpdateWebhookHeader={updateWebhookHeader}
+            onRemoveWebhookHeader={removeWebhookHeader}
             onStartRowChange={setStartRow}
             onConcurrencyChange={setConcurrency}
             onSend={sendToWebhook}

@@ -7,6 +7,12 @@ export type MappingRow = {
   value?: string;
 };
 
+export type WebhookHeader = {
+  key: string;
+  value: string;
+  enabled: boolean;
+};
+
 export type FailedRow = {
   index: number;
   payload: Record<string, string>;
