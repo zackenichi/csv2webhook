@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 type ForwardRequest = {
   url?: string;
   payload?: Record<string, unknown>;
+  headers?: Record<string, string>;
 };
 
 const isValidHttpUrl = (value: string) => {
@@ -26,11 +27,19 @@ export async function POST(request: Request) {
   }
 
   try {
+    const forwardedHeaders = new Headers({
+      "Content-Type": "application/json",
+    });
+
+    Object.entries(body.headers ?? {}).forEach(([key, value]) => {
+      const trimmedKey = key.trim();
+      if (!trimmedKey) return;
+      forwardedHeaders.set(trimmedKey, value);
+    });
+
     const response = await fetch(targetUrl, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
+      headers: forwardedHeaders,
       body: JSON.stringify(body.payload ?? {}),
     });
 
