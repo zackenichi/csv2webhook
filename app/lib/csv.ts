@@ -37,6 +37,12 @@ const DEFAULT_FIELD_MAP: Record<string, string> = {
 const normalizeHeader = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
+const isCamelCase = (value: string) =>
+  /^[a-z][a-zA-Z0-9]*$/.test(value) && /[A-Z]/.test(value);
+
+const isSnakeCase = (value: string) =>
+  /^[a-z0-9]+(?:_[a-z0-9]+)+$/.test(value);
+
 const toCamelCase = (value: string) => {
   const parts = value
     .replace(/['"]/g, "")
@@ -50,6 +56,15 @@ const toCamelCase = (value: string) => {
       return lower.charAt(0).toUpperCase() + lower.slice(1);
     })
     .join("");
+};
+
+const resolveDefaultKey = (header: string) => {
+  if (isCamelCase(header) || isSnakeCase(header)) {
+    return header;
+  }
+
+  const normalized = normalizeHeader(header);
+  return DEFAULT_FIELD_MAP[normalized] ?? toCamelCase(header);
 };
 
 export const parseCSV = (text: string) => {
@@ -102,8 +117,7 @@ export const parseCSV = (text: string) => {
 
 export const buildMapping = (headers: string[], sampleRow: string[]): MappingRow[] =>
   headers.map((header, index) => {
-    const normalized = normalizeHeader(header);
-    const defaultKey = DEFAULT_FIELD_MAP[normalized] ?? toCamelCase(header);
+    const defaultKey = resolveDefaultKey(header);
     return {
       header,
       key: defaultKey,
